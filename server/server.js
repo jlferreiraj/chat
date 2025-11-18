@@ -276,6 +276,18 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, workspace: WORKSPACE_ROOT, baseURL: LMSTUDIO_BASE_URL });
 });
 
+// Fetch available models from LM Studio
+app.get('/api/models', async (_req, res) => {
+  try {
+    const models = await client.models.list();
+    const ids = models?.data?.map(m => m.id) || [];
+    res.json({ ok: true, models: ids });
+  } catch (err) {
+    console.error('Failed to fetch models:', err);
+    res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
 // Lightweight context introspection for the UI/debug
 app.get('/api/context/summary', (_req, res) => {
   try {

@@ -100,6 +100,7 @@ export default function App() {
 
   const [model, setModel] = useLocalStorage('model', 'gpt-4o-mini');
   const [temperature, setTemperature] = useLocalStorage('temperature', 0.1);
+  const [availableModels, setAvailableModels] = useState([]);
 
   const [showFiles, setShowFiles] = useState(false);
   const [fileTree, setFileTree] = useState([]);
@@ -227,17 +228,31 @@ export default function App() {
     if (showFiles && !fileTree.length) loadFileTree();
   }, [showFiles, fileTree.length, loadFileTree]);
 
+  useEffect(() => {
+    async function fetchModels() {
+      try {
+        const res = await fetch('/api/models');
+        const data = await res.json();
+        if (data?.ok && data.models?.length) {
+          setAvailableModels(data.models);
+          if (!data.models.includes(model)) {
+            setModel(data.models[0]);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch models:', e);
+      }
+    }
+    fetchModels();
+  }, []);
+
   return (
     <div className="h-full bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 flex flex-col">
       <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2 flex items-center justify-between flex-wrap gap-2">
         <h1 className="font-semibold">AI Chat</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <select value={model} onChange={e => setModel(e.target.value)} className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-            <option value="gpt-4o-mini">gpt-4o-mini</option>
-            <option value="gpt-4o">gpt-4o</option>
-            <option value="llama-3.1-70b-instruct">llama-3.1-70b</option>
-            <option value="qwen2.5-coder-32b">qwen2.5-coder-32b</option>
-            <option value="deepseek-coder-33b">deepseek-coder-33b</option>
+            {availableModels.length ? availableModels.map(m => <option key={m} value={m}>{m}</option>) : <option value="gpt-4o-mini">gpt-4o-mini</option>}
           </select>
           <label className="text-xs flex items-center gap-1">
             Temp:
