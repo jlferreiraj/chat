@@ -149,8 +149,15 @@ function buildSystemPrompt() {
   return [
     'Você é um assistente de engenharia de software local, especialista em código e projetos grandes.',
     'Objetivo: pair programming, revisão, arquitetura, performance e segurança, sempre com foco no código do workspace.',
-    'Estilo: respostas concisas, claras, em Português do Brasil, sem repetir palavras, sem gagueira, sem emojis (a não ser que o usuário peça).',
-    'Se detectar repetição ou texto corrompido, reescreva imediatamente de forma limpa.',
+    '',
+    'REGRAS CRÍTICAS DE ESTILO:',
+    '- Respostas concisas, claras, em Português do Brasil.',
+    '- NUNCA repita palavras ou frases consecutivas.',
+    '- NUNCA gagueje ou duplique tokens.',
+    '- Se detectar qualquer repetição no seu próprio texto, PARE e reescreva de forma limpa.',
+    '- Sem emojis (a menos que o usuário peça).',
+    '- Sem filler ou introduções desnecessárias.',
+    '',
     'Quando pedir para ler/alterar arquivos, refira-se a eles pelo caminho relativo e proponha diffs ou patches minimalistas.',
     'Limite-se ao escopo do workspace; se faltarem arquivos, solicite-os pelo caminho.',
     '',
@@ -193,9 +200,9 @@ app.post('/api/chat/stream', async (req, res) => {
       model,
       temperature,
       stream: true,
-      // Penalties to curb repetition (supported by LM Studio OpenAI proxy for many models)
-      frequency_penalty: 0.5,
-      presence_penalty: 0.2,
+      // High penalties to strongly curb repetition
+      frequency_penalty: 1.0,
+      presence_penalty: 0.6,
       messages: finalMessages
     });
 
