@@ -105,6 +105,9 @@ export default function App() {
   const [workspace, setWorkspace] = useLocalStorage('workspace', '');
   const [workspaceInput, setWorkspaceInput] = useState('');
   const [changingWorkspace, setChangingWorkspace] = useState(false);
+  const [recentWorkspaces, setRecentWorkspaces] = useLocalStorage('recentWorkspaces', []);
+  const [favoriteWorkspaces, setFavoriteWorkspaces] = useLocalStorage('favoriteWorkspaces', []);
+  const [showWorkspacePicker, setShowWorkspacePicker] = useState(false);
 
   const [showFiles, setShowFiles] = useState(false);
   const [currentDir, setCurrentDir] = useState('.');
@@ -254,6 +257,11 @@ export default function App() {
         setCurrentDir('.');
         setSelectedFile(null);
         setMessages(prev => [...prev, { role: 'system', content: `📁 Workspace alterado: ${data.workspace}` }]);
+        // Add to recent workspaces (max 10, no duplicates)
+        setRecentWorkspaces(prev => {
+          const filtered = prev.filter(w => w !== data.workspace);
+          return [data.workspace, ...filtered].slice(0, 10);
+        });
       } else {
         alert('Erro ao trocar workspace: ' + (data?.error || 'Caminho inválido'));
       }
@@ -263,7 +271,37 @@ export default function App() {
     } finally {
       setChangingWorkspace(false);
     }
-  }, [workspaceInput]);
+  }, [workspaceInput, setRecentWorkspaces]);
+
+  const selectWorkspace = useCallback((path) => {
+    setWorkspaceInput(path);
+    setShowWorkspacePicker(false);
+  }, []);
+
+  const addFavorite = useCallback(() => {
+    const name = prompt('Nome para este workspace:');
+    if (!name?.trim() || !workspace) return;
+    setFavoriteWorkspaces(prev => {
+      const exists = prev.find(f => f.path === workspace);
+      if (exists) return prev;
+      return [...prev, { name: name.trim(), path: workspace }];
+    });
+  }, [workspace, setFavoriteWorkspaces]);
+
+  const removeFavorite = useCallback((path) => {
+    setFavoriteWorkspaces(prev => prev.filter(f => f.path !== path));
+  }, [setFavoriteWorkspaces]);
+
+  // Close workspace picker on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (showWorkspacePicker && !e.target.closest('.workspace-picker')) {
+        setShowWorkspacePicker(false);
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [showWorkspacePicker]);
 
   useEffect(() => {
     if (showFiles && !fileTree.length) loadFileTree();
@@ -324,18 +362,53 @@ export default function App() {
         </div>
         <div className="flex items-center gap-2">
           <label className="text-xs font-medium">Workspace:</label>
-          <input
-            type="text"
-            value={workspaceInput}
-            onChange={e => setWorkspaceInput(e.target.value)}
-            placeholder="/caminho/completo/do/projeto"
-            className="flex-1 text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
-          />
+          <div className="flex-1 relative workspace-picker">
+            <input
+              type="text"
+              value={workspaceInput}
+              onChange={e => setWorkspaceInput(e.target.value)}
+              onFocus={() => setShowWorkspacePicker(true)}
+              placeholder="/caminho/completo/do/projeto"
+              className="w-full text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+            />
+            {showWorkspacePicker && (recentWorkspaces.length > 0 || favoriteWorkspaces.length > 0) && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded shadow-lg z-50 max-h-64 overflow-auto">
+                {favoriteWorkspaces.length > 0 && (
+                  <div className="border-b border-zinc-200 dark:border-zinc-700">
+                    <div className="text-xs font-semibold px-2 py-1 bg-zinc-50 dark:bg-zinc-900">⭐ Favoritos</div>
+                    {favoriteWorkspaces.map((fav, i) => (
+                      <div key={i} className="px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center justify-between group">
+                        <button onClick={() => selectWorkspace(fav.path)} className="flex-1 text-left text-xs">
+                          <div className="font-medium">{fav.name}</div>
+                          <div className="text-zinc-500 dark:text-zinc-400 truncate">{fav.path}</div>
+                        </button>
+                        <button onClick={() => removeFavorite(fav.path)} className="opacity-0 group-hover:opacity-100 text-red-500 text-xs px-1">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {recentWorkspaces.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold px-2 py-1 bg-zinc-50 dark:bg-zinc-900">🕒 Recentes</div>
+                    {recentWorkspaces.map((ws, i) => (
+                      <button key={i} onClick={() => selectWorkspace(ws)} className="w-full text-left px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-xs truncate">{ws}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <button
             onClick={changeWorkspace}
             disabled={changingWorkspace}
             className="text-xs px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700"
           >Trocar</button>
+          <button
+            onClick={addFavorite}
+            disabled={!workspace}
+            className="text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
+            title="Adicionar aos favoritos"
+          >⭐</button>
         </div>
       </header>
 
