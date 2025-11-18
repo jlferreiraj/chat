@@ -1,0 +1,11 @@
+node_modules
+.env
+.DS_Store
+dist
+build
+coverage
+web/node_modules
+web/dist
+.next
+.venv
+**/.cache

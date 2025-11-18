@@ -1,0 +1,26 @@
+{
+  "name": "ai-chat",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "server": "node server/server.js",
+    "client": "npm --prefix web run dev",
+    "dev": "concurrently -k -n server,web \"npm:server\" \"npm:client\"",
+    "build": "npm --prefix web run build",
+    "preview": "npm --prefix web run preview"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "diff": "^5.2.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "fast-glob": "^3.3.2",
+    "ignore": "^5.3.2",
+    "openai": "^4.56.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
