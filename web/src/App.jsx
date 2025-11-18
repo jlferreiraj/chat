@@ -103,6 +103,7 @@ export default function App() {
   const [availableModels, setAvailableModels] = useState([]);
 
   const [showFiles, setShowFiles] = useState(false);
+  const [currentDir, setCurrentDir] = useState('.');
   const [fileTree, setFileTree] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
@@ -170,14 +171,27 @@ export default function App() {
       const data = await res.json();
       if (data?.ok) {
         setFileTree(data.result || []);
+        setCurrentDir(dir);
       }
     } catch (e) {
       console.error(e);
     }
   }, []);
 
-  const openFile = useCallback(async (path) => {
+  const openDir = useCallback((name) => {
+    const newPath = currentDir === '.' ? name : `${currentDir}/${name}`;
+    loadFileTree(newPath);
+  }, [currentDir, loadFileTree]);
+
+  const goUpDir = useCallback(() => {
+    if (currentDir === '.') return;
+    const parts = currentDir.split('/');
+    parts.pop();
+    const parent = parts.length ? parts.join('/') : '.';
+    loadFileTree(parent);
+  }, [currentDir, loadFileTree]);  const openFile = useCallback(async (name) => {
     try {
+      const path = currentDir === '.' ? name : `${currentDir}/${name}`;
       const res = await fetch('/api/tools', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'read_file', args: { path } }) });
       const data = await res.json();
       if (data?.ok) {
@@ -189,7 +203,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-  }, []);
+  }, [currentDir]);
 
   const requestWriteFile = useCallback(async (path, content) => {
     try {
@@ -273,15 +287,21 @@ export default function App() {
           <aside className="w-64 border-r border-zinc-200 dark:border-zinc-800 overflow-auto p-2">
             <div className="text-xs font-semibold mb-2 flex items-center justify-between">
               <span>Workspace</span>
-              <button onClick={() => loadFileTree()} className="text-blue-600 dark:text-blue-400 hover:underline">↻</button>
+              <button onClick={() => loadFileTree(currentDir)} className="text-blue-600 dark:text-blue-400 hover:underline">↻</button>
+            </div>
+            <div className="text-xs mb-2 flex items-center gap-1 text-zinc-600 dark:text-zinc-400">
+              {currentDir !== '.' && (
+                <button onClick={goUpDir} className="hover:text-zinc-900 dark:hover:text-zinc-100">←</button>
+              )}
+              <span className="truncate">{currentDir === '.' ? 'root' : currentDir}</span>
             </div>
             <ul className="space-y-1">
               {fileTree.map((item, i) => (
                 <li key={i}>
                   {item.type === 'dir' ? (
-                    <div className="text-sm font-medium opacity-70">{item.name}/</div>
+                    <button onClick={() => openDir(item.name)} className="text-sm font-medium opacity-70 hover:opacity-100 hover:underline text-left w-full">📁 {item.name}</button>
                   ) : (
-                    <button onClick={() => openFile(item.name)} className="text-sm hover:underline text-left w-full">{item.name}</button>
+                    <button onClick={() => openFile(item.name)} className="text-sm hover:underline text-left w-full">📄 {item.name}</button>
                   )}
                 </li>
               ))}
