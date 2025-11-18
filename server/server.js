@@ -182,6 +182,29 @@ function sseEvent(res, event, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+// Clean token: remove corrupted/repeated patterns
+function cleanToken(token, previousTokens = '') {
+  if (!token) return '';
+  
+  // Remove obvious corruption patterns (XML-like tags, JSON fragments)
+  if (token.includes('</message>') || token.includes('<|channel|>') || token.includes('{"path"')) {
+    return '';
+  }
+  
+  // Detect immediate word-level repetition (e.g., "Como Como", "ajudar ajudar")
+  const words = (previousTokens + token).split(/\s+/).filter(w => w.length > 0);
+  if (words.length >= 2) {
+    const last = words[words.length - 1];
+    const secondLast = words[words.length - 2];
+    if (last && secondLast && last.toLowerCase() === secondLast.toLowerCase()) {
+      // Skip this token if it creates immediate repetition
+      return '';
+    }
+  }
+  
+  return token;
+}
+
 // Chat streaming (proxy LM Studio -> SSE)
 app.post('/api/chat/stream', async (req, res) => {
   try {
@@ -207,6 +230,7 @@ app.post('/api/chat/stream', async (req, res) => {
     });
 
     let fullText = '';
+    let buffer = ''; // Track last ~50 chars for repetition detection
 
     for await (const part of stream) {
       const choice = part.choices?.[0];
@@ -215,8 +239,12 @@ app.post('/api/chat/stream', async (req, res) => {
       const delta = choice.delta || {};
       const content = delta?.content;
       if (content) {
-        fullText += content;
-        sseEvent(res, 'token', { content });
+        const cleaned = cleanToken(content, buffer);
+        if (cleaned) {
+          fullText += cleaned;
+          buffer = (buffer + cleaned).slice(-50); // Keep rolling window
+          sseEvent(res, 'token', { content: cleaned });
+        }
       }
 
       if (choice.finish_reason) {
