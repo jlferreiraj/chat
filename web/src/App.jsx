@@ -102,6 +102,10 @@ export default function App() {
   const [temperature, setTemperature] = useLocalStorage('temperature', 0.1);
   const [availableModels, setAvailableModels] = useState([]);
 
+  const [workspace, setWorkspace] = useLocalStorage('workspace', '');
+  const [workspaceInput, setWorkspaceInput] = useState('');
+  const [changingWorkspace, setChangingWorkspace] = useState(false);
+
   const [showFiles, setShowFiles] = useState(false);
   const [currentDir, setCurrentDir] = useState('.');
   const [fileTree, setFileTree] = useState([]);
@@ -238,6 +242,29 @@ export default function App() {
     }
   }, [diffData]);
 
+  const changeWorkspace = useCallback(async () => {
+    if (!workspaceInput.trim()) return;
+    setChangingWorkspace(true);
+    try {
+      const res = await fetch('/api/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: workspaceInput.trim() }) });
+      const data = await res.json();
+      if (data?.ok) {
+        setWorkspace(data.workspace);
+        setFileTree([]);
+        setCurrentDir('.');
+        setSelectedFile(null);
+        setMessages(prev => [...prev, { role: 'system', content: `📁 Workspace alterado: ${data.workspace}` }]);
+      } else {
+        alert('Erro ao trocar workspace: ' + (data?.error || 'Caminho inválido'));
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao trocar workspace: ' + e.message);
+    } finally {
+      setChangingWorkspace(false);
+    }
+  }, [workspaceInput]);
+
   useEffect(() => {
     if (showFiles && !fileTree.length) loadFileTree();
   }, [showFiles, fileTree.length, loadFileTree]);
@@ -257,28 +284,58 @@ export default function App() {
         console.error('Failed to fetch models:', e);
       }
     }
+    async function fetchWorkspace() {
+      try {
+        const res = await fetch('/api/workspace');
+        const data = await res.json();
+        if (data?.ok) {
+          setWorkspace(data.workspace);
+          setWorkspaceInput(data.workspace);
+        }
+      } catch (e) {
+        console.error('Failed to fetch workspace:', e);
+      }
+    }
     fetchModels();
+    fetchWorkspace();
   }, []);
 
   return (
     <div className="h-full bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 flex flex-col">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2 flex items-center justify-between flex-wrap gap-2">
-        <h1 className="font-semibold">AI Chat</h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          <select value={model} onChange={e => setModel(e.target.value)} className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-            {availableModels.length ? availableModels.map(m => <option key={m} value={m}>{m}</option>) : <option value="gpt-4o-mini">gpt-4o-mini</option>}
-          </select>
-          <label className="text-xs flex items-center gap-1">
-            Temp:
-            <input type="number" min="0" max="2" step="0.1" value={temperature} onChange={e => setTemperature(parseFloat(e.target.value))} className="w-14 px-1 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800" />
-          </label>
-          <button className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={() => setShowFiles(!showFiles)}>{showFiles ? 'Ocultar' : 'Arquivos'}</button>
-          <button className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={handleSearch}>/grep</button>
+      <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2 space-y-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h1 className="font-semibold">AI Chat</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={model} onChange={e => setModel(e.target.value)} className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+              {availableModels.length ? availableModels.map(m => <option key={m} value={m}>{m}</option>) : <option value="gpt-4o-mini">gpt-4o-mini</option>}
+            </select>
+            <label className="text-xs flex items-center gap-1">
+              Temp:
+              <input type="number" min="0" max="2" step="0.1" value={temperature} onChange={e => setTemperature(parseFloat(e.target.value))} className="w-14 px-1 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800" />
+            </label>
+            <button className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={() => setShowFiles(!showFiles)}>{showFiles ? 'Ocultar' : 'Arquivos'}</button>
+            <button className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={handleSearch}>/grep</button>
+            <button
+              className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              onClick={() => setDark(!dark)}
+              aria-label="Alternar tema"
+            >{dark ? 'Light' : 'Dark'}</button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium">Workspace:</label>
+          <input
+            type="text"
+            value={workspaceInput}
+            onChange={e => setWorkspaceInput(e.target.value)}
+            placeholder="/caminho/completo/do/projeto"
+            className="flex-1 text-xs px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+          />
           <button
-            className="text-sm px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            onClick={() => setDark(!dark)}
-            aria-label="Alternar tema"
-          >{dark ? 'Light' : 'Dark'}</button>
+            onClick={changeWorkspace}
+            disabled={changingWorkspace}
+            className="text-xs px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700"
+          >Trocar</button>
         </div>
       </header>
 

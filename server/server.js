@@ -14,7 +14,7 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '2mb' }));
 
 const PORT = process.env.PORT || 3000;
-const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || process.cwd());
+let WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || process.cwd());
 const LMSTUDIO_BASE_URL = process.env.LMSTUDIO_BASE_URL || 'http://127.0.0.1:1234/v1';
 const LMSTUDIO_API_KEY = process.env.LMSTUDIO_API_KEY || 'lm-studio';
 const DEFAULT_MODEL = process.env.MODEL || 'gpt-4o-mini';
@@ -292,6 +292,32 @@ app.get('/api/models', async (_req, res) => {
 app.get('/api/context/summary', (_req, res) => {
   try {
     res.json({ ok: true, summary: workspaceSummary() });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// Get current workspace
+app.get('/api/workspace', (_req, res) => {
+  res.json({ ok: true, workspace: WORKSPACE_ROOT });
+});
+
+// Set new workspace (validates path exists and is a directory)
+app.post('/api/workspace', (req, res) => {
+  try {
+    const { path: newPath } = req.body || {};
+    if (!newPath) return res.status(400).json({ ok: false, error: 'path required' });
+    const resolved = path.resolve(newPath);
+    if (!fs.existsSync(resolved)) {
+      return res.status(400).json({ ok: false, error: 'Path does not exist' });
+    }
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) {
+      return res.status(400).json({ ok: false, error: 'Path is not a directory' });
+    }
+    WORKSPACE_ROOT = resolved;
+    console.log(`Workspace changed to: ${WORKSPACE_ROOT}`);
+    res.json({ ok: true, workspace: WORKSPACE_ROOT });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }

@@ -48,6 +48,12 @@ npm run preview
 - O frontend envia as mensagens para `/api/chat/stream` (POST) e consome via streaming (SSE) pelo corpo da resposta.
 - O backend proxy-a o LM Studio (`/v1/chat/completions`), emite eventos `token` e `done`.
 
+## Múltiplos Workspaces
+- Você pode trocar o workspace ativo em tempo real pela UI (campo "Workspace" no header).
+- Digite o caminho completo (ex: `/Users/jay/Documents/outro-projeto`) e clique "Trocar".
+- O backend valida se o caminho existe e é um diretório antes de alterar.
+- Todas as ferramentas (list_dir, read_file, grep, etc.) passam a operar no novo workspace sem reiniciar o servidor.
+
 ## Ferramentas (Tools API)
 - `list_dir`, `read_file`, `write_file` (dry-run por padrão), `apply_patch` (unified), `glob`, `grep`.
 - Escrita segura: use `approve=true` para aplicar.
