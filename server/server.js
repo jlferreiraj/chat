@@ -17,6 +17,7 @@ const PORT = process.env.PORT || 3000;
 const WORKSPACE_ROOT = path.resolve(process.env.WORKSPACE_ROOT || process.cwd());
 const LMSTUDIO_BASE_URL = process.env.LMSTUDIO_BASE_URL || 'http://127.0.0.1:1234/v1';
 const LMSTUDIO_API_KEY = process.env.LMSTUDIO_API_KEY || 'lm-studio';
+const DEFAULT_MODEL = process.env.MODEL || 'gpt-4o-mini';
 
 const client = new OpenAI({ baseURL: LMSTUDIO_BASE_URL, apiKey: LMSTUDIO_API_KEY });
 
@@ -118,6 +119,46 @@ function grep(pattern, cwdRel = '.', { maxMatches = 200 } = {}) {
   return out.slice(0, maxMatches);
 }
 
+// Build a small, bounded workspace summary for better grounding
+function workspaceSummary() {
+  const top = listDir('.');
+  const rootFiles = top.filter(x => x.type === 'file').map(x => x.name).slice(0, 30);
+  const rootDirs = top.filter(x => x.type === 'dir').map(x => x.name).slice(0, 15);
+
+  function listSome(patterns, limit = 60) {
+    const files = fg.sync(patterns, { cwd: WORKSPACE_ROOT, dot: false, ignore: DEFAULT_IGNORES.map(i => `**/${i}/**`) });
+    return files.slice(0, limit);
+  }
+
+  const serverFiles = listSome(['server/**/*.{js,ts}'], 60);
+  const webFiles = listSome(['web/**/*.{js,jsx,ts,tsx,css,html}', 'web/*.{js,ts}'], 80);
+
+  const lines = [];
+  lines.push(`Workspace: ${WORKSPACE_ROOT}`);
+  lines.push(`Root files (${rootFiles.length}): ${rootFiles.join(', ')}`);
+  lines.push(`Root dirs (${rootDirs.length}): ${rootDirs.join(', ')}`);
+  if (serverFiles.length) lines.push(`server/* (${serverFiles.length}):`);
+  serverFiles.forEach(f => lines.push(` - ${f}`));
+  if (webFiles.length) lines.push(`web/* (${webFiles.length}):`);
+  webFiles.forEach(f => lines.push(` - ${f}`));
+  return lines.join('\n');
+}
+
+function buildSystemPrompt() {
+  const summary = workspaceSummary();
+  return [
+    'Você é um assistente de engenharia de software local, especialista em código e projetos grandes.',
+    'Objetivo: pair programming, revisão, arquitetura, performance e segurança, sempre com foco no código do workspace.',
+    'Estilo: respostas concisas, claras, em Português do Brasil, sem repetir palavras, sem gagueira, sem emojis (a não ser que o usuário peça).',
+    'Se detectar repetição ou texto corrompido, reescreva imediatamente de forma limpa.',
+    'Quando pedir para ler/alterar arquivos, refira-se a eles pelo caminho relativo e proponha diffs ou patches minimalistas.',
+    'Limite-se ao escopo do workspace; se faltarem arquivos, solicite-os pelo caminho.',
+    '',
+    'Resumo do workspace (somente para contexto, não repita na resposta a menos que útil):',
+    summary
+  ].join('\n');
+}
+
 // SSE helpers
 function sseInit(res) {
   res.writeHead(200, {
@@ -137,17 +178,25 @@ function sseEvent(res, event, data) {
 // Chat streaming (proxy LM Studio -> SSE)
 app.post('/api/chat/stream', async (req, res) => {
   try {
-    const { messages, model = 'gpt-4o-mini', temperature = 0.2 } = req.body || {};
+    const { messages, model = DEFAULT_MODEL, temperature = 0.1 } = req.body || {};
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: 'messages must be an array' });
     }
     sseInit(res);
 
+    // Inject a workspace-aware system prompt at the start unless user already provided one
+    const sys = { role: 'system', content: buildSystemPrompt() };
+    const hasSystem = messages.length && messages[0].role === 'system';
+    const finalMessages = hasSystem ? messages : [sys, ...messages];
+
     const stream = await client.chat.completions.create({
       model,
       temperature,
       stream: true,
-      messages
+      // Penalties to curb repetition (supported by LM Studio OpenAI proxy for many models)
+      frequency_penalty: 0.5,
+      presence_penalty: 0.2,
+      messages: finalMessages
     });
 
     let fullText = '';
@@ -225,6 +274,15 @@ app.post('/api/tools', (req, res) => {
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, workspace: WORKSPACE_ROOT, baseURL: LMSTUDIO_BASE_URL });
+});
+
+// Lightweight context introspection for the UI/debug
+app.get('/api/context/summary', (_req, res) => {
+  try {
+    res.json({ ok: true, summary: workspaceSummary() });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 app.listen(PORT, () => {
